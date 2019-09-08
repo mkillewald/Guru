@@ -1,0 +1,830 @@
+/**************************************************************************\
+$VER: C-Net Guru, v0.1 (Aug-25-2019) by k1ds3ns4t10n of -X-caliber BBS
+\**************************************************************************/
+options results;signal on SYNTAX;signal on ERROR;signal on IOERR
+a=sourceline(2);parse var a . " " title ", " ver " (" vdate ") by " author " " .
+tr=transmit;se=sendstring;gc=getchar;gu=getuser;gs=getscratch;mg=maygetchar
+bbsidentify bbs;cv=left(word(result,3),4);cnet4=(datatype(cv,"n")=1&cv>"4.25") 
+parse source . . fp .; df=left(fp,max(lastpos('/',fp),lastpos(':',fp)))
+parse arg mode
+if mode~="JL" then changewhere title
+/**************************************************************************\
+**                                                                        **
+**  C-Net Guru                                 -X-caliber BBS             **
+**    a future PHENOM PRODUCTIONS release         bbs.aholix.net:6800     **
+**    by k1ds3ns4t10n (Mike Killewald)                                    **
+**                                                                        **
+**                                                                        **
+**  Change Log:                                                           **
+**    v0.1 Aug-25-2019  first version                                     **
+**                                                                        **
+**  INSTALATION INSTRUCTIONS:                                             **
+**  1) Download http_get from Aminet and install in C:                    **
+**     https://aminet.net/package/comm/tcp/http_get                       **
+**                                                                        **
+**  2) Obtain a Wolphram|Alpha Short Answer API AppId                     **
+**     http://products.wolframalpha.com/short-answers-api/documentation/  **
+**                                                                        **
+**  3) Copy and paste your AppId into g.appID where indicated below       **
+**     this comment block                                                 **
+**                                                                        **
+**  4) Install Guru.rx at Pfiles:Guru/Guru.rx                             **
+**                                                                        **
+**  5) Add the two lines below to your CNET:bbsmenu file in the           **
+**     Available Everywhere section:                                      **
+**                                                                        **
+**     CGURU `0-31| Q#0 pfiles:guru/guru.rx}                              **
+**     GURU~CGURU;                                                        **
+**                                                                        **
+**                  ^ NOTE: "Q" here is a ctrl-Q                          **
+**                                                                        **
+**  6) Add the following line to SYSTEXT:noises                           **
+**                                                                        **
+**     guru 0 Q#0 pfiles:guru/guru.rx JL}<'0 seek's wisdom from the Guru> **
+**                                                                        **   
+**            ^ NOTE: "Q" here is a ctrl-Q                                **
+**                                                                        **
+**  7) Do a reload text on your bbs, and you should be all set!           **
+**     either                                                             **
+**        type RT at any bbs prompt                                       **
+**     or                                                                 **
+**        hit right-Amiga-T from the CNet/5 Control Panel                 **
+**                                                                        **
+\**************************************************************************/
+
+/* SysOp Configurable Options *********************************************/
+/* REMOVE APPID BEFORE COMMITS */
+g.appId="" /* <--enter your Wolfram|Alpha API AppId here */
+
+/* these temp dirs will be auto created as needed by Guru */
+g.tempPath   = "RAM:GURU/"     /* temp dir for response files */
+g.tempJLPath = "RAM:GURU/JL/"  /* temp dir for JL scripts */
+
+/* these swtiches control Guru's output (0=off, 1=on)  */
+g.cnfPreview = 0  /* In Conference, show preview with Yes/No prompt before 
+                     sending results to the room */
+                   
+g.cnfAutoCan = 1  /* In Conference auto cancel any invalid responses or 
+                     timed out messages */ 
+                   
+g.autoRetry  = 1  /* Auto-retry API request if it times out or returns
+                     a blank result. User may cancel the request by pressing
+                     the ESC key */
+                   
+g.guruBox    = 0  /* Display flashing yellow box around Guru results */
+
+g.debug      = 0  /* show errors if using guru as SysOp (account #1 only), 
+                     this is for troubleshooting only and should not be left
+                     on during normal operations. */
+
+/* ok to change these as needed for your system */
+g.timeout=30  /* API http request timeout in seconds */
+
+g.guruUser   = "Guru" /* the handle of the Guru account that will give results
+                         in Conference. To disable this, set g.guruUser="" */
+                       
+g.confName   = "Conference" /* the name of your Conference (as seen on WHo) */
+
+/* ok to change these messages, but do not add ANSI or MCI codes.
+   You can customize colors in the next block down below */
+s.computing  = "Computing"
+s.replyHazy  = "Reply hazy, try again later."
+s.resTimedOut= "Response timed out, please try again later."
+s.sorryDave  = "I'm sorry Dave, I'm afraid I can't do that."
+s.cancelled  = "Computational analysis interrupted by my user,.."
+s.shareToRoom= "Share with the room?"
+s.escToCancel= "(ESC to cancel)"
+
+
+/* Color format: esc"<intensity>;<background>;<foreground>" 
+   
+   intensity 0=off/reset, 1=on                              
+
+   background colors     foreground colors   
+       black=40              black=30       
+         red=41                red=31      
+       green=42              green=32      
+      yellow=43             yellow=33      
+        blue=44               blue=34      
+     magenta=45            magenta=35      
+        cyan=46               cyan=36      
+       white=47              white=37   
+*/
+
+esc="[";c.blink=esc"5m";c.reset=esc"0m" /* do not change this */
+
+/* ok to change the color data inside the quotes as needed */
+c.cp1  = esc"1;37m"  /* command prompt color 1 */
+c.cp2  = esc"0;37m"  /* command prompt color 2 */
+c.cphl = esc"1;32m"  /* command prompt highlight color */
+c.usr  = esc"0;36m"  /* user text entry color */ 
+c.res  = esc"1;33m"  /* results display color */
+c.foot = esc"1;30m"  /* footer color */
+c.err  = esc"1;31m"  /* Guru Meditation color */
+c.jlnu = esc"0;35m"  /* the color of the JL noise seen by the user */
+
+/* End of SysOp Configurable Options **************************************/
+
+
+/* pre-determined responses from the Wolfram|Alpha API, do not change */ 
+s.didNotCompute = "Wolfram|Alpha did not understand your input"
+s.noShortAnswer = "No short answer available"
+s.invalidAppId  = "Error 1: Invalid appid"
+
+/* as needed per Wolfram|Alpha terms of use */
+s.footerString  = "powered by Wolfram|Alpha"
+
+/* gather some user info */
+gu 40; g.uid = space(result ,0)  /* account id */
+gu 23; g.userPort=result         /* userport */
+gu 27; g.maxCol=result-1         /* term width */
+
+if g.appId=="" then signal badAppId
+g.debug=g.debug&g.uid==1
+
+do forever
+  cmdPrompt = c.cp1"("c.cphl"?"c.cp1","c.cphl"T"c.cp1","c.cphl"Q"c.cp1") Guru> "c.usr
+  prompt 65 NORMAL cmdPrompt
+  query = strip(result,"B")
+
+  if query=="###PANIC" | query=="" | upper(query)=="Q" | upper(query)=="QU" |,
+     upper(query)=="QUI" | upper(query)=="QUIT" then signal EXIT
+  else if upper(query)=="GURU" & mode~="JL" then signal gurus
+  else if upper(query)=="<YOUR QUERY>" | upper(query)=="YOUR QUERY" then signal id10t
+  else if query=="?" | upper(query)=="H" then call guruHelp
+  else if upper(query)=="T" then call termsOfUse
+  else leave
+  call check
+end 
+
+/* replace back tick ` with tick ' */
+query = replace(query, "`", "'")
+
+/* replace " with "" */
+query = replace(query, '"', '""')
+
+/* Delete the last results file in case it wasn't deleted last time */
+call deleteResponseFile  
+
+/* fetch result from API */ 
+guruResponse = fetchResult(query)
+
+/* Delete the results file */
+call deleteResponseFile
+  
+/* replace characters C-Net cannot display properly */
+call getCharSwapTables
+do i=0 to charSwapMax
+  guruResponse= replace(guruResponse, charSwapIn.i, charSwapOut.i)
+end
+
+guru:
+validResponse = guruResponse~=s.resTimedOut & guruResponse~=s.replyHazy &,
+                guruResponse~=s.didNotCompute & guruResponse~=s.noShortAnswer &,
+                guruResponse~=s.cancelled
+
+if guruResponse==s.invalidAppId then signal badAppId
+else if guruResponse==s.didNotCompute & g.guruUser~="" then guruResponse = replace(guruResponse, "Wolfram|Alpha", g.guruUser)
+else if guruResponse==s.noShortAnswer then guruResponse=s.sorryDave
+else if guruResponse=="" then guruResponse=s.replyHazy  
+
+/* display result directly to user if in normal operation, 
+   or if in JL mode with cnfPreview enabled */
+if mode~="JL" | (mode=="JL" & g.cnfPreview) then do 
+  if mode~="JL" then tr
+  call guruMessage(guruResponse, g.guruBox)
+  if validResponse then call displayFooter(s.footerString, "right")
+end
+
+if mode=="JL" then do
+  if g.cnfAutoCan & ~validResponse then do
+    /* cnfAutoCan is enabled and response is invalid. if cnfPreview is off
+       then show the invalid response direclty to user, then exit */
+    if ~g.cnfPreview then call guruMessage(guruResponse, g.guruBox)
+    signal EXIT
+  end
+  else if g.cnfPreview then do 
+    if validResponse then do
+      /* cnfPreview is enabled and response is valid, so show yes/no prompt */
+      /* get length of footerString + jlPrompt + Yes */
+      combinedLength = length(s.shareToRoom) + length(" (yes/No): ") + length(s.footerString) + 3
+      if g.maxCol > combinedLength then se esc"1A"
+    end
+    jlPrompt = c.cp1||s.shareToRoom" ("c.cphl"y"c.cp2"es"c.cp1"/"c.cphl"N"c.cp2"o"c.cp1"): "c.usr
+    prompt 1 NOYES jlPrompt
+    answer=result
+    if answer=="No" then signal EXIT
+  end
+  /* if we made it this far, send result out to Conference */
+  call spitToConference(query, guruResponse, g.maxCol-3) /* -3 for safety */
+end
+
+EXIT:
+if mode=="JL" then se c.jlnu /* reset JL noise color before exiting */
+exit
+
+/* Procedures *************************************************************/
+
+fetchResult: procedure expose tr se mg ver esc g. c. s.
+  parse arg query
+
+  if ~exists(g.tempPath) then address command 'makedir 'strip(g.tempPath,"T","/")
+  
+  /* URL encode the query input string */
+  call getUrlEncodeTables  
+  do i=0 to urlEncodeMax
+    query= replace(query, urlEncodeIn.i, urlEncodeOut.i)
+  end
+  query= space(query, 1, "+")
+
+  /* build uri */
+  uri="http://api.wolframalpha.com/v1/result?appid="g.appId"&timeout="g.timeout"&i="query
+  
+  /* make API request */
+  apirequest:
+  filename= "response"g.uid
+  filePath= g.tempPath||filename
+  /* this is just for giggles, because... why the hell not? */
+  userAgent= "http_get/1.0 (AmigaOS 3.1; Amiga; 68040; ks:40.68; wb:40.42) CNet/5 Guru/"strip(ver,'L','v')" bbs.aholix.net:6800"
+  httpcmd='run http_get -u "'userAgent'" 'uri' >'filePath
+  address command httpcmd 
+  
+  call time('r')
+  
+  se c.res||s.computing
+  dotCount=0
+  bufferflush
+  do until time('e') > g.timeout + 2
+    mg
+    if result=="NOCHAR" then nop
+    else if C2D(result)==27 then do
+      /*  ESC key will exit */
+      body = s.cancelled
+      leave /* cause loop to exit */
+    end
+    call delay(50) /* 1 second */
+    if exists(filePath) then do
+      if open(GRF, filePath, R) then do
+        body = readln(GRF)
+        call close(GRF)
+        leave /* cause loop to exit */
+      end
+      else do
+        if g.debug then tr c.err"GURU: could not open "filePath
+        body = s.resTimedOut
+      end
+    end
+    else do
+      if g.debug then tr c.err"GURU: "filePath" does not exist"
+      body = s.resTimedOut
+    end
+    if dotCount==0 then se " "s.escToCancel
+    else se "."
+    dotCount = dotCount + 1
+    call check
+  end
+  computeLen = length(s.computing) + length(s.escToCancel) + dotCount + 1
+  se esc||computeLen"D"copies(' ', computeLen)||esc||computeLen"D"c.jlnu
+  bufferflush
+  if g.autoRetry & (body == s.resTimedOut | body == "") then signal apirequest 
+return body
+
+/* word wraps an input string at a given width and will not split any words
+   @param text  the input string to word wrap
+   @param width the width to wrap at
+  
+   results will be placed into an array called resultsArr structured as:
+     resultArr.0 = line count
+     resultArr.1 = line 1 string
+     resultArr.2 = line 2 string
+      .
+      .
+      .
+     resultArr.n = line n string     
+*/
+wordWrap: procedure expose resultArr.
+  parse arg text, width
+  
+  /* clear any previous data in the results array */
+  drop resultArr.
+  
+  /* line count is held at position 0, init it to line 1 */
+  resultArr.0 = 1
+  
+  if length(text) <= width then do
+    resultArr.1 = text 
+    return
+  end
+
+  line = resultArr.0
+  resultArr.1 = ""
+  do while text ~= "" 
+      parse var text word text
+      
+      /* check if current line + next word < width */
+      if length(resultArr.line) + length(word) + 1 <= width then do
+          /* add word to current line */
+          if resultArr.line=="" then resultArr.line = word
+          else resultArr.line = resultArr.line" "word
+      end
+      else do
+          /* start new line with with next word */    
+          line = line + 1 
+          resultArr.line = word
+    end
+  end
+    
+  /* store final line count at position 0 of the array */
+  resultArr.0 = line      
+return
+
+/* word wraps an input string at a given width and will split words that
+   are longer than width. This function is based on code provided by
+   aNACHRONiST, thanks again my man!!
+   
+   @param text  the input string to word wrap
+   @param width the width to wrap at
+   @param mode  a mode flag (set to JL for JL/Conference)
+  
+   results will be placed into an array called resultsArr structured as:
+     resultArr.0 = line count
+     resultArr.1 = line 1 string
+     resultArr.2 = line 2 string
+      .
+      .
+      .
+     resultArr.n = line n string     
+*/
+wordWrapByChar: procedure expose resultArr.
+  parse arg text, width, responseMode
+  
+  /* clear previous data in results array */
+  drop resultArr.
+  
+  /* init results array */
+  line = 1
+  resultArr.0 = line
+  resultArr.1 = text
+  textLen = length(text)
+  if textLen <= width then return
+    
+  do while textLen > width    
+    /* get position of last space within width chars */
+
+    /* If responseMode is JLU or JLG, we will be sending the guru response
+       in segments of 3 lines each to meet the requirements of the user 
+       input buffer inside Conference.
+       
+       If responseMode is JLU, the first line of each segment will show 
+       "Guru #/#: " which is 10-12 chars, so we must compensate for that
+       here as we word wrap the response. */
+    if responseMode=="JLU" & (line == 1 | (line-1)//3==0) then lineWidth = width - 12
+    else lineWidth = width
+    spacePos = lastpos(" ", text, lineWidth)
+  
+    if spacePos~=0 then do
+      /* space found, cut text at space position -1 */
+      cutPos = spacePos-1
+      resumePos = textLen-spacePos
+    end
+    else do
+      /* space not found, cut text at width */
+      cutPos = lineWidth
+      resumePos = textLen-lineWidth     
+    end
+    resultArr.line = left(text, cutPos)
+    text = right(text, resumePos)
+    textLen = length(text)
+  
+    /* place remaining text into next line */
+    line = line + 1
+    resultArr.line = text
+    
+    /* update line count */
+    resultArr.0 = line
+  end
+return
+
+/* spits query and response to Conference in safe bite size pieces. 
+   MAD props to aNACHRONiST for the Conference integration!!
+   
+   @param query    the users query string
+   @param response the response fronm Wolfram|Alpha simple API
+   @param width    the number of chars to break response at
+*/
+spitToConference: procedure expose tr gu gs cnet4 g. c. resultArr.
+  parse arg query, response, width
+
+  /* init response port to the user port */
+  responsePort = g.userPort 
+  guruPort = -1
+
+  /* find account id for guruUser */
+  if g.guruUser~="" then do
+    findaccount g.guruUser; guruUid=result
+  
+    /* if guruUser account found, check if account is logged in */
+    if guruUid~=0 then do
+      /* read in some guruUser account info */
+      loadscratch guruUid /* lock guru account */
+      gs 27; guruWidth=result-4 /* -4 for safety */
+      savescratch 0-guruUid /* remove lock */
+      
+      /* get highest loaded port */
+      guHp=word("2225094 2227884", cnet4+1)
+      gu guHp; hiPort=result
+      
+      /* check all ports to see if guruUser is logged in */
+      do i=0 to hiPort 
+        getportid i; portUid=result
+        if portUid==guruUid then do
+          /* guruUser is logged in and we found its port, now lets
+             check if guruUser is in Conference */
+          guruPort = i
+          getwhere i; guruWhere = result 
+          if guruWhere==g.confName then do
+            /* guruUser found, logged in and in Conference */
+            responsePort = i 
+            /* TODO: add check if user and guru are in same room, if not move Guru to users room */
+          end
+          leave i
+        end
+      end
+    end
+  end
+
+  /* replace occurances of " with "" to avoid conflict in generated scripts */
+  response = replace(response, '"', '""')
+  
+  if responsePort==g.userPort & g.userPort~=guruPort then responseMode="JLU" /* response to User port */
+  else do
+    responseMode="JLG" /* response to Guru port */ /* not really used */
+    width = guruWidth
+  end
+
+  call wordWrapByChar(response, width, responseMode)
+  
+  lineCount=resultArr.0  
+  if ~exists(g.tempJLPath) then address command 'makedir 'strip(g.tempJLPath,"T","/")
+  
+  /* get number of segments, each segment holds 3 lines of word wrapped text */
+  if lineCount > 3 then do
+    segment = lineCount % 3
+    if lineCount // 3 ~= 0 then segment = segment + 1
+  end
+  else segment = 1
+  
+  /* generate lead JL script */
+  if open(JLF,g.tempJLPath||g.userPort'JLF.0',W) then do 
+    call writeln(JLF,'/*Guru JL Lead Script*/')
+    call writeln(JLF,'address CNETREXX'g.userPort)
+    call writeln(JLF,'addkeys "Hey Guru, 'query'`"')
+    call writeln(JLF,'spawn "'g.tempJLPath||g.userPort'JLF.1"')
+    call writeln(JLF,'exit')
+    call close(JLF)
+  end
+  else do
+    if g.debug then tr c.err"GURU: Failed to open lead JL script for writing"
+    return
+  end
+        
+  /* generate JL segment scripts */
+  do segmentLoop=1 to segment
+    if open(JLF,g.tempJLPath||g.userPort'JLF.'segmentLoop,W) then do
+      call writeln(JLF,'/*Guru JL Segment Script*/')
+      call writeln(JLF,'address CNETREXX'responsePort)
+        
+      /* grab 3 lines of resultArr (1 segment) and write to script */
+      data=""
+      do lineLoop=(segmentLoop*3)-2 to segmentLoop*3
+        if lineLoop > lineCount then leave lineLoop
+        data=data" "resultArr.lineLoop
+      end
+      
+      if segment==1 & responseMode=="JLU" then call writeln(JLF,'addkeys "Guru: 'strip(data,"B")'`"')
+      else if segment>1 & responseMode=="JLU" then call writeln(JLF,'addkeys "Guru 'segmentLoop'/'segment': 'strip(data,"B")'`"')
+      else call writeln(JLF,'addkeys "'strip(data,"B")'`"')
+  
+      if segment > segmentLoop then call writeln(JLF,'spawn "'g.tempJLPath||g.userPort'JLF.'segmentLoop+1'"')
+      else call writeln(JLF,'address command "run >nil: delete 'g.tempJLPath||g.userPort'JLF.#?"') /* this message will self-destruct! */
+      call writeln(JLF,'exit')
+      call close(JLF)
+    end
+    else do
+      if g.debug then tr c.err"GURU: failed to open segment "segmentLoop" script for writing"
+      return
+    end
+  end
+
+  /* run the lead JL script and immediately exit. The lead script will spawn
+     the next segment, which spawns the next segment and so on */
+  address command 'run >nil: RX 'g.tempJLPath||g.userPort'JLF.0'
+return
+
+deleteResponseFile: procedure expose tr g. c.
+  filename= "response"g.uid
+  filePath= g.tempPath||filename
+  if exists(filePath) then do
+    delcommand = "run >nil: delete "filePath" force"
+    do delLoop = 1 to 5
+      address command delcommand
+      if ~exists(filePath) then leave delLoop
+      call delay(10)
+    end
+    
+    if g.debug & exists(filePath) then tr c.err"GURU: file "filePath" was not deleted"
+    else if g.debug then tr c.err"GURU: file "filePath" was deleted."
+  end
+  else if g.debug then tr c.err"GURU: could not delete "filePath", because it does not exist"
+return
+
+/* replace - replace srch text with repl text in text 
+      ->replace("astrologer","log","nom")
+      astronomer
+      
+   Source: Using Arexx on the Amiga, page 313
+*/
+replace: procedure
+  parse arg text, srch, repl
+  if index(text, srch)==0 then return text
+  
+  slen = length(srch)
+  tlen = length(text)
+  do until tlen = 0
+    tlen = lastpos(srch, text, tlen)
+    if tlen ~= 0 then do
+      text = insert(repl, delstr(text,tlen,slen), tlen - 1)
+      tlen = tlen - 1
+    end
+  end
+return text
+
+guruHelp:
+  if g.maxCol<69 then cutPos=39
+  else cutPos=g.maxCol
+  tr c.res||title||c.usr" "ver" by "author||esc"1m (bbs.aholix.net:6800)"
+  tr
+  tr c.cp1"Usage:"
+  tr c.usr"At any system prompt, type: "c.cp1"guru "c.cp2"<your query>"
+  tr c.usr"or in Conference, type "c.cp1"=guru"c.cp2"[ENTER]"c.usr" and enter your query at the "c.cp1"Guru>"c.usr" prompt" 
+  tr
+  tr c.cp1||trim(left("Ask questions:                                Look up common acronyms:", cutPos))
+  tr c.usr||trim(left("  What time is it in Detroit, Michigan?         DTW   LAX   DFW  LAG", cutPos))
+  tr trim(left("  How big is the universe?                      ROFL  LMAO  LOL", cutPos))
+  tr c.cp1||trim(left("Perform unit conversions:                     Look up notable people:", cutPos))
+  tr c.usr||trim(left("  500 miles in kilometers                       Jay Miner", cutPos))
+  tr trim(left("  pints in a quart                              Dennis Ritchie", cutPos))
+  tr trim(left("  ounces in a cup                               Guido Van Rossum", cutPos))
+  tr c.cp1||trim(left("Perform calculations:                         Get word definitions:", cutPos))
+  tr c.usr||trim(left("  square root of 42                             subcutaneous", cutPos))
+  tr trim(left("  3.7 million divided by 634                    Thesmophoriazusae", cutPos))
+  tr
+  tr c.cphl"?"c.cp2"=help"c.cp1", "c.cphl"T"c.cp2"erms of Use"c.cp1", "c.cphl"Q"c.cp2"uit"
+  tr
+return
+
+termsOfUse:
+  tr
+  tr c.cp1"Terms of Use"
+  tr
+  tou=esc||c.res"C-Net Guru"c.usr" is powered by "esc"1;31mWolfram"
+  tou=tou||esc"0;31m|"esc"1;31mAlpha "c.usr"which is also accessible "
+  tou=tou||"by visiting http://www.wolframalpha.com. Results and information "
+  tou=tou||"from this site are not a certified or definitive source of "
+  tou=tou||"information that can be relied on for legal, financial, medical, "
+  tou=tou||"life-safety or any other critical purposes. Please read the full "
+  tou=tou||"terms of use at "c.cp2"http://products.wolframalpha.com/api/termsofuse.html"
+  tr tou
+  tr
+return
+
+gurus:
+  cls
+  c.res = esc"0;31m"
+  gr = "A very short list of notable Gurus are: Jack Tramiel, Nolan "
+  gr = gr"Bushnell, Jay Miner, Robert J. Mical, David Needle, Dave Haynie, "
+  gr = gr"Dennis Ritchie, Bjarne Stroustrup, James Gosling, Guido Van "
+  gr = gr"Rossom, Brendan Eich, John Backus, Niklaus Wirth, Alan Kay, "
+  gr = gr"Mike Cowlishaw, Anders Hejlsberg, Bradford Cox, Tom Love, Charles "
+  gr = gr"Babbage, Alan Turing, Steve Wozniak, Robert Russell, Robert "
+  gr = gr"Yannes, Al Charpentier, ZeroPaige, Dotoran, PHENOM, Araknet, "
+  gr = gr"Smooth, aNACHRONiST, iMPURE, Fuel, ACiD, Blocktronics, Fairlight, "
+  gr = gr"Censor Design, Noice, Void, Booze Design, The Black Lotus, Prosonix, "
+  gr = gr"Sanity, Kefrens, Scoopex, Tristar, Red Sector Incorporated, "
+  gr = gr"Crionics, Offence, The Kommodore Krew, Cinemaware, Psygnosis, The "
+  gr = gr"Bitmap Brothers, Sensible Software, Bullfrog, DMA Design, Team17, "
+  gr = gr"Delphine, Newtek, and many, many more..."
+  guruResponse = gr
+  s.footerString="-k1ds3ns4t10n, 2019"
+  g.guruBox = 1
+  signal guru
+return
+
+guruMessage: procedure expose tr c. g. resultArr.
+  parse arg response, drawBox
+  if drawBox then do
+    tr c.res||c.blink"�"copies('�', g.maxCol-2)"�"
+    call wordWrap(response, g.maxCol-4)
+    do i=1 to resultArr.0
+      tr c.blink"� "c.reset||c.res|| center(resultArr.i, g.maxCol-4)||c.blink" �"
+    end
+    tr c.res||c.blink"�"copies('�', g.maxCol-2)"�"c.reset 
+  end 
+  else do
+    call wordWrap(response, g.maxCol)
+    do i=1 to resultArr.0
+      tr c.res||resultArr.i
+    end
+  end 
+return
+
+guruError: procedure expose tr c. g.
+  parse arg errMsg1, errMsg2 
+  cls
+  tr c.err
+  
+  tr c.blink"�"copies('�', g.maxCol-2)"�"
+  
+  call wordWrap(errMsg1, g.maxCol-4)
+  do i=1 to resultArr.0
+    tr c.blink"� "c.reset||c.err|| center(resultArr.i, g.maxCol-4)||c.blink" �"
+  end
+  
+  call wordWrap(errMsg2, g.maxCol-4)
+  do i=1 to resultArr.0
+    tr c.blink"� "c.reset||c.err|| center(resultArr.i, g.maxCol-4)||c.blink" �"
+  end
+  
+  tr c.blink"�"copies('�', g.maxCol-2)"�"c.reset
+return
+
+displayFooter: procedure expose tr c. g.
+  parse arg string, mode
+  
+  select
+    when mode=="right" then tr c.foot||right(string, g.maxCol, ' ')
+    when mode=="center" then tr c.foot||center(string, g.maxCol)
+    otherwise tr c.foot||string
+  end
+return 
+
+id10t:
+  c.err = esc"0;31m"
+  if mode=="JL" then errMsg1 = "Try: =guru[enter] what is the definition of literally?"
+  else errMsg1 = "Try: guru what is the definition of literally?"
+  errMSg2 = "Guru Meditation #00000000:0001D10T"
+  call guruError(errMsg1, errMsg2)
+  exit
+
+badAppId:
+  c.err = esc"0;31m"
+  errMsg1 = "AppId is invalid!  Please read the instructions inside Guru.rx"
+  errMSg2 = "Guru Meditation #00000000:84D4PP1D"
+  call guruError(errMsg1, errMsg2)
+  exit
+
+getUrlEncodeTables:  
+  /* input table */   /* output table */ 
+  urlEncodeIn.0="%";  urlEncodeOut.0="%25"
+  urlEncodeIn.1="*";  urlEncodeOut.1="%2A"
+  urlEncodeIn.2="'";  urlEncodeOut.2="%27"
+  urlEncodeIn.3="(";  urlEncodeOut.3="%28"
+  urlEncodeIn.4=")";  urlEncodeOut.4="%29"
+  urlEncodeIn.5=";";  urlEncodeOut.5="%3B"
+  urlEncodeIn.6=":";  urlEncodeOut.6="%3A"
+  urlEncodeIn.7="@";  urlEncodeOut.7="%40"
+  urlEncodeIn.8="&";  urlEncodeOut.8="%26"
+  urlEncodeIn.9="=";  urlEncodeOut.9="%3D"
+  urlEncodeIn.10="+"; urlEncodeOut.10="%2B"
+  urlEncodeIn.11="$"; urlEncodeOut.11="%24"
+  urlEncodeIn.12=","; urlEncodeOut.12="%2C"
+  urlEncodeIn.13="/"; urlEncodeOut.13="%2F"
+  urlEncodeIn.14="?"; urlEncodeOut.14="%3F"
+  urlEncodeIn.15="!"; urlEncodeOut.15="%21"
+  urlEncodeIn.16="#"; urlEncodeOut.16="%23"
+  urlEncodeIn.17="["; urlEncodeOut.17="%5B"
+  urlEncodeIn.18="]"; urlEncodeOut.18="%5D"
+  
+  urlEncodeMax=18
+return
+
+/* this is far from a complete list, but just covered the basics */ 
+getCharSwapTables:
+  /* emdash */
+  /* input table */ /* output table */ 
+  charSwapIn.0="–";charSwapOut.0="-"  
+
+  /* Umlaut */
+  /* input table */ /* output table */ 
+  charSwapIn.1="ä";charSwapOut.1="ae"
+  charSwapIn.2="Ä";charSwapOut.2="AE"
+  charSwapIn.3="ë";charSwapOut.3="e"
+  charSwapIn.4="Ë";charSwapOut.4="E"
+  charSwapIn.5="ï";charSwapOut.5="i"
+  charSwapIn.6="Ï";charSwapOut.6="I"
+  charSwapIn.7="ö";charSwapOut.7="o"
+  charSwapIn.8="Ö";charSwapOut.8="O"
+  charSwapIn.9="ü";charSwapOut.9="u"
+  charSwapIn.10="Ü";charSwapOut.10="U"
+  charSwapIn.11="ÿ";charSwapOut.11="y"
+  charSwapIn.12="Ÿ";charSwapOut.12="Y"
+  
+  /* Tilde */
+  /* input table */ /* output table */ 
+  charSwapIn.13="ã";charSwapOut.13="a"
+  charSwapIn.14="Ã";charSwapOut.14="A"
+  charSwapIn.15="ñ";charSwapOut.15="n"
+  charSwapIn.16="Ñ";charSwapOut.16="N"
+  charSwapIn.17="õ";charSwapOut.17="o"
+  charSwapIn.18="Õ";charSwapOut.18="O"
+  
+  /* Circumflex */
+  /* input table */ /* output table */ 
+  charSwapIn.19="â";charSwapOut.19="a"
+  charSwapIn.20="Â";charSwapOut.20="A"
+  charSwapIn.21="ê";charSwapOut.21="e"
+  charSwapIn.22="Ê";charSwapOut.22="E"
+  charSwapIn.23="î";charSwapOut.23="i"
+  charSwapIn.24="Î";charSwapOut.24="I"
+  charSwapIn.25="ô";charSwapOut.25="o"
+  charSwapIn.26="Ô";charSwapOut.26="O"
+  charSwapIn.27="û";charSwapOut.27="u"
+  charSwapIn.28="Û";charSwapOut.28="U"
+  
+  /* Acute */
+  /* input table */ /* output table */ 
+  charSwapIn.29="á";charSwapOut.29="a"
+  charSwapIn.30="Á";charSwapOut.30="A"
+  charSwapIn.31="é";charSwapOut.31="e"
+  charSwapIn.32="É";charSwapOut.32="E"
+  charSwapIn.33="í";charSwapOut.33="i"
+  charSwapIn.34="Í";charSwapOut.34="I"
+  charSwapIn.35="ó";charSwapOut.35="o"
+  charSwapIn.36="Ó";charSwapOut.36="O"
+  charSwapIn.37="ú";charSwapOut.37="u"
+  charSwapIn.38="Ú";charSwapOut.38="U"
+  charSwapIn.39="ý";charSwapOut.39="y"
+  charSwapIn.40="Ý";charSwapOut.40="Y"
+  
+  /* Grave */
+  /* input table */ /* output table */ 
+  charSwapIn.41="à";charSwapOut.41="a"
+  charSwapIn.42="À";charSwapOut.42="A"
+  charSwapIn.43="è";charSwapOut.43="e"
+  charSwapIn.44="È";charSwapOut.44="E"
+  charSwapIn.45="ì";charSwapOut.45="i"
+  charSwapIn.46="Ì";charSwapOut.46="I"
+  charSwapIn.47="ò";charSwapOut.47="o"
+  charSwapIn.48="Ò";charSwapOut.48="O"
+  charSwapIn.49="ù";charSwapOut.49="u"
+  charSwapIn.50="Ù";charSwapOut.50="U"
+  
+  /* Others */
+  charSwapIn.51="å";charSwapOut.51="a"
+  charSwapIn.52="Å";charSwapOut.52="A"
+  charSwapIn.53="ø";charSwapOut.53="o"
+  charSwapIn.54="Ø";charSwapOut.54="O"
+  charSwapIn.55="‐";charSwapOut.55="-"
+  charSwapIn.56="—";charSwapOut.56="-"
+  charSwapIn.57="…";charSwapOut.57="..."
+  charSwapIn.58="Æ" ;charSwapOut.58="AE"
+  
+  /* one off special case "ta biblia" in query="bible" */
+  charSwapIn.59="τὰ βιβλία, "; charSwapOut.59="" 
+  
+  charSwapMax=59
+return
+
+/**************************************************************************/
+
+CHECK:
+  if ARG() & ARG(1)~="###PANIC" then return ARG(1)
+  getcarrier
+  if result="TRUE" then do
+    if ARG() then return ARG(1)
+    else return
+  end
+  logentry "Lost Carrier!!"
+  bufferflush
+  signal EXIT
+  
+SYNTAX:;ERROR:;IOERR:
+  e1="n1 Error: " rc " (" errortext(rc) ")"
+  e2="  Line: " left(sigl,4) "File:"
+  c="`"fp", "ver"'";
+  e2=e2" "c
+  tr e1
+  tr e2
+  logentry e1
+  logentry e2
+  e=strip(translate(sourceline(sigl),"\{",""))
+  do while e~=""
+    e3="Source: "left(e,37)
+    tr e3
+    logentry e3
+    e=substr(e,38)
+  end
+  bufferflush
+  exit
+/**************************************************************************\
+\**************************************** -X-caliber bbs.aholix.net:6800 **/

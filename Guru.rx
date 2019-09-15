@@ -142,7 +142,9 @@ gu 40; g.uid = space(result ,0)  /* account id */
 gu 23; g.userPort=result         /* userport */
 gu 27; g.maxCol=result-1         /* term width */
 
-if g.appId=="" then signal badAppId
+if g.appId=="" | g.appId=="yourappidhere" then signal badAppId
+else if ~exists("c:http_get") then signal badHttp
+  
 g.debug=g.debug&g.uid==1
 
 do forever

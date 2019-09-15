@@ -241,68 +241,92 @@ exit
 
 /* Procedures *************************************************************/
 
-fetchResult: procedure expose tr se mg ver esc g. c. s.
-  parse arg query
-
-  if ~exists(g.tempPath) then address command 'makedir 'strip(g.tempPath,"T","/")
+deleteFile: procedure expose tr c. g.
+  parse arg filename
   
-  /* URL encode the query input string */
-  call getUrlEncodeTables  
-  do i=0 to urlEncodeMax
-    query= replace(query, urlEncodeIn.i, urlEncodeOut.i)
-  end
-  query= space(query, 1, "+")
-
-  /* build uri */
-  uri="http://api.wolframalpha.com/v1/result?appid="g.appId"&timeout="g.timeout"&i="query
-  
-  /* make API request */
-  apirequest:
-  filename= "response"g.uid
   filePath= g.tempPath||filename
-  /* this is just for giggles, because... why the hell not? */
+  delcommand = "run >nil: delete "filePath" force"
+  if exists(filePath) then do  
+    do delLoop = 1 to 5
+      address command delcommand
+      if ~exists(filePath) then leave delLoop
+      call delay(10)
+    end   
+    if g.debug & exists(filePath) then tr c.err"GURU: file "filePath" was not deleted"
+  end
+return
+
+/* fetches web request 
+   @param uri       the url to retrieve
+   @param fileName  the filename where to store results
+   
+   returns the result as a string
+*/
+fetchWebRequest: procedure expose se tr mg esc ver c. g. s.
+  parse arg uri, filename
+  
+  filePath= g.tempPath||filename
   userAgent= "http_get/1.0 (AmigaOS 3.1; Amiga; 68040; ks:40.68; wb:40.42) CNet/5 Guru/"strip(ver,'L','v')" bbs.aholix.net:6800"
-  httpcmd='run http_get -u "'userAgent'" 'uri' >'filePath
-  address command httpcmd 
-  
-  call time('r')
-  
-  se c.res||s.computing
-  dotCount=0
-  bufferflush
-  do until time('e') > g.timeout + 2
-    mg
-    if result=="NOCHAR" then nop
-    else if C2D(result)==27 then do
-      /*  ESC key will exit */
-      body = s.cancelled
-      leave /* cause loop to exit */
-    end
-    call delay(50) /* 1 second */
-    if exists(filePath) then do
-      if open(GRF, filePath, R) then do
-        body = readln(GRF)
-        call close(GRF)
+
+  /* run through outer loop at least once, repeat the loop if g.autoRetry is 
+     enabled and body=="" */
+
+  do until ~g.autoRetry | body ~= ""
+    /* init body */
+    body=""
+    
+    /* make API request */
+    httpcmd='run http_get -u "'userAgent'" 'uri' >'filePath
+    address command httpcmd 
+    
+    call time('r')
+    
+    /* show status message */
+    se c.res||s.computing
+    dotCount=0
+    
+    /* inner loop checks if the results file is ready and exits if the 
+       file is ready or the timeout period has been reached */
+       
+    bufferflush
+    do until time('e') > g.timeout + 1
+      mg
+      if result=="NOCHAR" then nop
+      else if C2D(result)==27 then do
+        /*  ESC key will exit */
+        body = s.cancelled
         leave /* cause loop to exit */
       end
-      else do
-        if g.debug then tr c.err"GURU: could not open "filePath
-        body = s.resTimedOut
+      else call check  
+        
+      call delay(25) /* 1/2 second */
+      
+      /* check if results file is ready yet */
+      if exists(filePath) then do
+        if open(GRF, filePath, R) then do
+          body = readln(GRF)
+          if body == "" then body = s.replyHazy
+          call close(GRF)
+          leave /* cause loop to exit */
+        end
+        else if g.debug then tr c.err"GURU: could not open "filePath
       end
-    end
-    else do
-      if g.debug then tr c.err"GURU: "filePath" does not exist"
-      body = s.resTimedOut
-    end
-    if dotCount==0 then se " "s.escToCancel
-    else se "."
-    dotCount = dotCount + 1
-    call check
-  end
-  computeLen = length(s.computing) + length(s.escToCancel) + dotCount + 1
-  se esc||computeLen"D"copies(' ', computeLen)||esc||computeLen"D"c.jlnu
-  bufferflush
-  if g.autoRetry & (body == s.resTimedOut | body == "") then signal apirequest 
+      else if g.debug then tr c.err"GURU: "filePath" does not exist"
+      
+      /* update status message */
+      if dotCount==0 then se " "s.escToCancel
+      else se "."
+      dotCount = dotCount + 1
+    end 
+    bufferflush
+    
+    /* clear status message */
+    computeLen = length(s.computing) + length(s.escToCancel) + dotCount + 1
+    se esc||computeLen"D"copies(' ', computeLen)||esc||computeLen"D"c.jlnu
+  end  
+  
+  /* check if request timed out */
+  if body=="" then body = s.reqTimedOut 
 return body
 
 /* word wraps an input string at a given width and will not split any words

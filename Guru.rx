@@ -4,61 +4,62 @@ $VER: C-Net Guru, v0.1 (Aug-25-2019) by k1ds3ns4t10n of -X-caliber BBS
 options results;signal on SYNTAX;signal on ERROR;signal on IOERR
 a=sourceline(2);parse var a . " " title ", " ver " (" vdate ") by " author " " .
 tr=transmit;se=sendstring;gc=getchar;gu=getuser;gs=getscratch;mg=maygetchar
-bbsidentify bbs;cv=left(word(result,3),4);cnet4=(datatype(cv,"n")=1&cv>"4.25") 
+bbsidentify bbs;cv=left(word(result,3),4);cnet4=(datatype(cv,"n")=1&cv>"4.25")
+bbsidentify name;g.bbsName=strip(result, 'B');esc="1b5b"x;cty="19"x;ctq="11"x
+rs="rexxsupport.library";if ~show("l",rs) then if ~addlib(rs,0,-30) then exit
 parse source . . fp .; df=left(fp,max(lastpos('/',fp),lastpos(':',fp)))
 parse arg mode
-if mode~="JL" then changewhere title
-/**************************************************************************\
-**                                                                        **
-**  C-Net Guru                                 -X-caliber BBS             **
-**    a future PHENOM PRODUCTIONS release         bbs.aholix.net:6800     **
-**    by k1ds3ns4t10n (Mike Killewald)                                    **
-**                                                                        **
-**                                                                        **
-**  Change Log:                                                           **
-**    v0.1 Aug-25-2019  first version                                     **
-**                                                                        **
-**  INSTALATION INSTRUCTIONS:                                             **
-**  1) Download http_get from Aminet and install in C:                    **
-**     https://aminet.net/package/comm/tcp/http_get                       **
-**                                                                        **
-**  2) Obtain a Wolphram|Alpha Short Answer API AppId                     **
-**     http://products.wolframalpha.com/short-answers-api/documentation/  **
-**                                                                        **
-**  3) Copy and paste your AppId into g.appID where indicated below       **
-**     this comment block                                                 **
-**                                                                        **
-**  4) Install Guru.rx at Pfiles:Guru/Guru.rx                             **
-**                                                                        **
-**  5) Add the two lines below to your CNET:bbsmenu file in the           **
-**     Available Everywhere section:                                      **
-**                                                                        **
-**     CGURU `0-31| Q#0 pfiles:guru/guru.rx}                              **
-**     GURU~CGURU;                                                        **
-**                                                                        **
-**                  ^ NOTE: "Q" here is a ctrl-Q                          **
-**                                                                        **
-**  6) Add the following line to SYSTEXT:noises                           **
-**                                                                        **
-**     guru 0 Q#0 pfiles:guru/guru.rx JL}<'0 seek's wisdom from the Guru> **
-**                                                                        **   
-**            ^ NOTE: "Q" here is a ctrl-Q                                **
-**                                                                        **
-**  7) Do a reload text on your bbs, and you should be all set!           **
-**     either                                                             **
-**        type RT at any bbs prompt                                       **
-**     or                                                                 **
-**        hit right-Amiga-T from the CNet/5 Control Panel                 **
-**                                                                        **
-\**************************************************************************/
-
+if mode~="JL" then changewhere title 
+/**************************************************************************/
+/*                                                                        */
+/*  C-Net Guru                                 -X-caliber BBS             */
+/*    a future PHENOM PRODUCTIONS release         bbs.aholix.net:6800     */
+/*    by k1ds3ns4t10n (Mike Killewald)                                    */
+/*                                                                        */
+/*  Changelog:                                                            */
+/*    v0.1 Aug-25-2019  first version                                     */
+/*                                                                        */
+/*  INSTALATION INSTRUCTIONS:                                             */
+/*  1) Download http_get from Aminet and install in C:                    */
+/*     https://aminet.net/package/comm/tcp/http_get                       */
+/*                                                                        */
+/*  2) Obtain a Wolphram|Alpha Short Answer API AppId                     */
+/*     http://products.wolframalpha.com/short-answers-api/documentation/  */
+/*                                                                        */
+/*  3) Copy and paste your AppId into g.appID where indicated below       */
+/*     this comment block                                                 */
+/*                                                                        */
+/*  4) Install Guru.rx at Pfiles:Guru/Guru.rx                             */
+/*                                                                        */
+/*  5) Add the two lines below to your CNET:bbsmenu file in the           */
+/*     Available Everywhere section:                                      */
+/*                                                                        */
+/*     CGURU `0-31| Q#0 pfiles:guru/guru.rx}                              */
+/*     GURU~CGURU;                                                        */
+/*                                                                        */
+/*                  ^ NOTE: "Q" here is a ctrl-Q                          */
+/*                                                                        */
+/*  6) Add the following line to SYSTEXT:noises                           */
+/*                                                                        */
+/*     guru 0 Q#0 pfiles:guru/guru.rx JL}<'0 seek's wisdom from the Guru> */
+/*                                                                        */
+/*            ^ NOTE: "Q" here is a ctrl-Q                                */
+/*                                                                        */
+/*  7) Do a reload text on your bbs, and you should be all set!           */
+/*     either                                                             */
+/*        type RT at any bbs prompt                                       */
+/*     or                                                                 */
+/*        hit right-Amiga-T from the CNet/5 Control Panel                 */
+/*                                                                        */
+/**************************************************************************/
 /* SysOp Configurable Options *********************************************/
-/* REMOVE APPID BEFORE COMMITS */
-g.appId="" /* <--enter your Wolfram|Alpha API AppId here */
 
-/* these temp dirs will be auto created as needed by Guru */
+g.appId="yourappidhere" /* <--enter your Wolfram|Alpha API AppId here */
+
+/* these paths will be auto created as needed, both paths must
+   end with a trailing slash */
 g.tempPath   = "RAM:GURU/"     /* temp dir for response files */
-g.tempJLPath = "RAM:GURU/JL/"  /* temp dir for JL scripts */
+g.tempJLPath = "RAM:GURU/JL/" /* temp dir for JL scripts */
 
 /* these swtiches control Guru's output (0=off, 1=on)  */
 g.cnfPreview = 0  /* In Conference, show preview with Yes/No prompt before 
@@ -78,7 +79,7 @@ g.debug      = 0  /* show errors if using guru as SysOp (account #1 only),
                      on during normal operations. */
 
 /* ok to change these as needed for your system */
-g.timeout=30  /* API http request timeout in seconds */
+g.timeout    = 30  /* API http request timeout in seconds */
 
 g.guruUser   = "Guru" /* the handle of the Guru account that will give results
                          in Conference. To disable this, set g.guruUser="" */
@@ -90,15 +91,13 @@ g.confName   = "Conference" /* the name of your Conference (as seen on WHo) */
 s.computing  = "Computing"
 s.replyHazy  = "Reply hazy, try again later."
 s.resTimedOut= "Response timed out, please try again later."
-s.sorryDave  = "I'm sorry Dave, I'm afraid I can't do that."
 s.cancelled  = "Computational analysis interrupted by my user,.."
 s.shareToRoom= "Share with the room?"
 s.escToCancel= "(ESC to cancel)"
 
-
 /* Color format: esc"<intensity>;<background>;<foreground>" 
    
-   intensity 0=off/reset, 1=on                              
+   intensity 0=off, 1=on                              
 
    background colors     foreground colors   
        black=40              black=30       
@@ -111,8 +110,6 @@ s.escToCancel= "(ESC to cancel)"
        white=47              white=37   
 */
 
-esc="[";c.blink=esc"5m";c.reset=esc"0m" /* do not change this */
-
 /* ok to change the color data inside the quotes as needed */
 c.cp1  = esc"1;37m"  /* command prompt color 1 */
 c.cp2  = esc"0;37m"  /* command prompt color 2 */
@@ -124,9 +121,15 @@ c.err  = esc"1;31m"  /* Guru Meditation color */
 c.jlnu = esc"0;35m"  /* the color of the JL noise seen by the user */
 
 /* End of SysOp Configurable Options **************************************/
+/**************************************************************************/
 
+c.blink=esc"5m"
+c.reset=esc"0m" 
 
-/* pre-determined responses from the Wolfram|Alpha API, do not change */ 
+if ~exists(g.tempPath) then address command 'makedir 'strip(g.tempPath,"T","/")
+if ~exists(g.tempJLPath) then address command 'makedir 'strip(g.tempJLPath,"T","/")
+
+/* these are expected responses from the Wolfram|Alpha API, do not change */ 
 s.didNotCompute = "Wolfram|Alpha did not understand your input"
 s.noShortAnswer = "No short answer available"
 s.invalidAppId  = "Error 1: Invalid appid"
@@ -164,13 +167,25 @@ query = replace(query, "`", "'")
 query = replace(query, '"', '""')
 
 /* Delete the last results file in case it wasn't deleted last time */
-call deleteResponseFile  
+filename= "response"g.uid
+call deleteFile(filename) 
+
+/* URL encode the query input string */
+tquery = query
+call getUrlEncodeTables  
+do i=0 to urlEncodeMax
+  tquery= replace(tquery, urlEncodeIn.i, urlEncodeOut.i)
+end
+tquery= space(tquery, 1, "+")
+
+/* build uri */
+uri="http://api.wolframalpha.com/v1/result?appid="g.appId"&timeout="g.timeout"&i="tquery
 
 /* fetch result from API */ 
-guruResponse = fetchResult(query)
+guruResponse = fetchWebRequest(uri, filename)
 
 /* Delete the results file */
-call deleteResponseFile
+call deleteFile(filename)
   
 /* replace characters C-Net cannot display properly */
 call getCharSwapTables
@@ -185,7 +200,6 @@ validResponse = guruResponse~=s.resTimedOut & guruResponse~=s.replyHazy &,
 
 if guruResponse==s.invalidAppId then signal badAppId
 else if guruResponse==s.didNotCompute & g.guruUser~="" then guruResponse = replace(guruResponse, "Wolfram|Alpha", g.guruUser)
-else if guruResponse==s.noShortAnswer then guruResponse=s.sorryDave
 else if guruResponse=="" then guruResponse=s.replyHazy  
 
 /* display result directly to user if in normal operation, 
@@ -412,7 +426,7 @@ return
    @param response the response fronm Wolfram|Alpha simple API
    @param width    the number of chars to break response at
 */
-spitToConference: procedure expose tr gu gs cnet4 g. c. resultArr.
+spitToConference: procedure expose tr gu gs cnet4 c. g. resultArr.
   parse arg query, response, width
 
   /* init response port to the user port */
@@ -465,7 +479,6 @@ spitToConference: procedure expose tr gu gs cnet4 g. c. resultArr.
   call wordWrapByChar(response, width, responseMode)
   
   lineCount=resultArr.0  
-  if ~exists(g.tempJLPath) then address command 'makedir 'strip(g.tempJLPath,"T","/")
   
   /* get number of segments, each segment holds 3 lines of word wrapped text */
   if lineCount > 3 then do
@@ -519,23 +532,6 @@ spitToConference: procedure expose tr gu gs cnet4 g. c. resultArr.
   /* run the lead JL script and immediately exit. The lead script will spawn
      the next segment, which spawns the next segment and so on */
   address command 'run >nil: RX 'g.tempJLPath||g.userPort'JLF.0'
-return
-
-deleteResponseFile: procedure expose tr g. c.
-  filename= "response"g.uid
-  filePath= g.tempPath||filename
-  if exists(filePath) then do
-    delcommand = "run >nil: delete "filePath" force"
-    do delLoop = 1 to 5
-      address command delcommand
-      if ~exists(filePath) then leave delLoop
-      call delay(10)
-    end
-    
-    if g.debug & exists(filePath) then tr c.err"GURU: file "filePath" was not deleted"
-    else if g.debug then tr c.err"GURU: file "filePath" was deleted."
-  end
-  else if g.debug then tr c.err"GURU: could not delete "filePath", because it does not exist"
 return
 
 /* replace - replace srch text with repl text in text 
@@ -827,4 +823,4 @@ SYNTAX:;ERROR:;IOERR:
   bufferflush
   exit
 /**************************************************************************\
-\**************************************** -X-caliber bbs.aholix.net:6800 **/
+\******************************* -X-caliber telnet://bbs.aholix.net:6800 **/

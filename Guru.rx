@@ -91,10 +91,11 @@ s.computing  = "Computing"
 s.replyHazy  = "Reply hazy, try again later."
 s.resTimedOut= "Response timed out, please try again later."
 s.cancelled  = "Computational analysis interrupted by my user,.."
+s.sorryDave  = "I'm sorry Dave, I'm afraid I can't do that."
 s.shareToRoom= "Share with the room?"
 s.escToCancel= "(ESC to cancel)"
 
-/* Color format: esc"<intensity>;<background>;<foreground>"
+/* Color format: esc"<intensity>;<background>;<foreground>m"
 
    intensity 0=off, 1=on
 
@@ -200,6 +201,7 @@ validResponse = guruResponse~=s.resTimedOut & guruResponse~=s.replyHazy &,
                 guruResponse~=s.cancelled
 
 if guruResponse==s.invalidAppId then signal badAppId
+else if guruResponse==s.noShortAnswer then guruResponse=s.sorryDave
 else if guruResponse==s.didNotCompute & g.guruUser~="" then guruResponse = replace(guruResponse, "Wolfram|Alpha", g.guruUser)
 else if guruResponse=="" then guruResponse=s.replyHazy
 
